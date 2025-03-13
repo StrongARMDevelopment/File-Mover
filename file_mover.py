@@ -22,16 +22,31 @@ def get_creation_year(folder_path):
         logging.error(f"Error getting creation date for {folder_path}: {e}")
         return None
 
-def move_folders(source, destination, year, limit):
-    """Moves project folders based on creation year."""
+def get_modified_year(folder_path):
+    """Returns the last modified year of a folder."""
+    try:
+        modified_time = os.path.getmtime(folder_path)
+        modified_year = time.localtime(modified_time).tm_year
+        logging.info(f"Modified year for {folder_path}: {modified_year}")
+        return modified_year
+    except Exception as e:
+        logging.error(f"Error getting modified date for {folder_path}: {e}")
+        return None
+
+def move_folders(source, destination, year, limit, use_modified_date, exclude_folders):
+    """Moves project folders based on creation or modified year."""
     try:
         folders = [f for f in os.listdir(source) if os.path.isdir(os.path.join(source, f))]
         moved_count = 0
         
         for folder in folders:
+            if folder in exclude_folders:
+                logging.info(f"Skipping {folder}: excluded by user.")
+                continue
+            
             folder_path = os.path.join(source, folder)
-            creation_year = get_creation_year(folder_path)
-            if creation_year == year:
+            folder_year = get_modified_year(folder_path) if use_modified_date else get_creation_year(folder_path)
+            if folder_year == year:
                 dest_path = os.path.join(destination, folder)
                 
                 if os.path.exists(dest_path):
@@ -55,6 +70,8 @@ def start_moving():
     destination = destination_entry.get()
     year = int(year_var.get()) if year_var.get().isdigit() else None
     limit = int(limit_var.get()) if limit_var.get().isdigit() else None
+    use_modified_date = modified_var.get()
+    exclude_folders = [folder.strip() for folder in exclude_var.get().split(',')]
     
     if not source or not destination or not year:
         messagebox.showerror("Error", "Please specify source, destination folders, and year.")
@@ -62,7 +79,7 @@ def start_moving():
     
     confirm = messagebox.askyesno("Confirm", "Proceed with moving folders?")
     if confirm:
-        threading.Thread(target=move_folders, args=(source, destination, year, limit), daemon=True).start()
+        threading.Thread(target=move_folders, args=(source, destination, year, limit, use_modified_date, exclude_folders), daemon=True).start()
 
 def select_source():
     folder = filedialog.askdirectory()
@@ -79,7 +96,7 @@ def select_destination():
 # GUI Setup
 root = tk.Tk()
 root.title("File Mover")
-root.geometry("400x300")
+root.geometry("960x540")
 
 tk.Label(root, text="Source Folder:").pack(pady=5)
 source_entry = tk.Entry(root, width=50)
@@ -100,6 +117,14 @@ tk.Label(root, text="Move Limit (0 = No Limit):").pack(pady=5)
 limit_var = tk.StringVar(value="0")
 limit_entry = tk.Entry(root, textvariable=limit_var)
 limit_entry.pack(pady=5)
+
+tk.Label(root, text="Folders to Exclude (comma separated):").pack(pady=5)
+exclude_var = tk.StringVar()
+exclude_entry = tk.Entry(root, textvariable=exclude_var)
+exclude_entry.pack(pady=5)
+
+modified_var = tk.BooleanVar()
+tk.Checkbutton(root, text="Use Last Modified Date Instead of Creation Date", variable=modified_var).pack(pady=5)
 
 tk.Button(root, text="Start Moving", command=start_moving).pack(pady=10)
 root.mainloop()
