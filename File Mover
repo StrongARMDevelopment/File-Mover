@@ -1,0 +1,101 @@
+import os
+import shutil
+import threading
+import tkinter as tk
+from tkinter import filedialog, messagebox, ttk
+from pathlib import Path
+import logging
+import time
+
+# Logging setup
+logging.basicConfig(filename="file_mover.log", level=logging.INFO, 
+                    format="%(asctime)s - %(levelname)s - %(message)s")
+
+def get_creation_year(folder_path):
+    """Returns the creation year of a folder."""
+    try:
+        creation_time = os.path.getctime(folder_path)
+        creation_year = time.localtime(creation_time).tm_year
+        logging.info(f"Creation year for {folder_path}: {creation_year}")
+        return creation_year
+    except Exception as e:
+        logging.error(f"Error getting creation date for {folder_path}: {e}")
+        return None
+
+def move_folders(source, destination, limit):
+    """Moves project folders based on creation year."""
+    try:
+        folders = [f for f in os.listdir(source) if os.path.isdir(os.path.join(source, f))]
+        moved_count = 0
+        
+        for folder in folders:
+            folder_path = os.path.join(source, folder)
+            creation_year = get_creation_year(folder_path)
+            if creation_year:
+                year_folder = os.path.join(destination, str(creation_year))
+                os.makedirs(year_folder, exist_ok=True)
+                dest_path = os.path.join(year_folder, folder)
+                
+                if os.path.exists(dest_path):
+                    logging.warning(f"Skipping {folder}: already exists in archive.")
+                    continue
+                
+                shutil.move(folder_path, dest_path)
+                logging.info(f"Moved {folder} to {dest_path}")
+                moved_count += 1
+                
+                if limit and moved_count >= limit:
+                    break
+        messagebox.showinfo("Process Complete", f"Moved {moved_count} folders.")
+    except Exception as e:
+        logging.error(f"Error moving folders: {e}")
+        messagebox.showerror("Error", f"An error occurred: {e}")
+
+def start_moving():
+    """Runs the moving function in a separate thread."""
+    source = source_entry.get()
+    destination = destination_entry.get()
+    limit = int(limit_var.get()) if limit_var.get().isdigit() else None
+    
+    if not source or not destination:
+        messagebox.showerror("Error", "Please specify source and destination folders.")
+        return
+    
+    confirm = messagebox.askyesno("Confirm", "Proceed with moving folders?")
+    if confirm:
+        threading.Thread(target=move_folders, args=(source, destination, limit), daemon=True).start()
+
+def select_source():
+    folder = filedialog.askdirectory()
+    if folder:
+        source_entry.delete(0, tk.END)
+        source_entry.insert(0, folder)
+
+def select_destination():
+    folder = filedialog.askdirectory()
+    if folder:
+        destination_entry.delete(0, tk.END)
+        destination_entry.insert(0, folder)
+
+# GUI Setup
+root = tk.Tk()
+root.title("File Mover")
+root.geometry("400x250")
+
+tk.Label(root, text="Source Folder:").pack(pady=5)
+source_entry = tk.Entry(root, width=50)
+source_entry.pack(pady=5)
+tk.Button(root, text="Browse", command=select_source).pack(pady=5)
+
+tk.Label(root, text="Destination Folder:").pack(pady=5)
+destination_entry = tk.Entry(root, width=50)
+destination_entry.pack(pady=5)
+tk.Button(root, text="Browse", command=select_destination).pack(pady=5)
+
+tk.Label(root, text="Move Limit (0 = No Limit):").pack(pady=5)
+limit_var = tk.StringVar(value="0")
+limit_entry = tk.Entry(root, textvariable=limit_var)
+limit_entry.pack(pady=5)
+
+tk.Button(root, text="Start Moving", command=start_moving).pack(pady=10)
+root.mainloop()
